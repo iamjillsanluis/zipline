@@ -20,11 +20,15 @@ from six import iteritems
 
 from zipline.assets import Equity, Future
 from zipline.finance.order import Order
-from zipline.finance.slippage import VolumeShareSlippage
+from zipline.finance.slippage import (
+    VolumeContractSlippage,
+    VolumeShareSlippage,
+)
 from zipline.finance.commission import (
+    DEFAULT_FUTURE_COST_BY_SYMBOL,
     DEFAULT_FUTURE_COST_PER_TRADE,
+    PerContract,
     PerShare,
-    PerTrade,
 )
 from zipline.finance.cancel_policy import NeverCancel
 
@@ -55,12 +59,13 @@ class Blotter(object):
 
         self.slippage_models = {
             Equity: equity_slippage or VolumeShareSlippage(),
-            Future: future_slippage or VolumeShareSlippage(),
+            Future: future_slippage or VolumeContractSlippage(),
         }
         self.commission_models = {
             Equity: equity_commission or PerShare(),
-            Future: future_commission or PerTrade(
-                cost=DEFAULT_FUTURE_COST_PER_TRADE,
+            Future: future_commission or PerContract(
+                cost=DEFAULT_FUTURE_COST_BY_SYMBOL,
+                min_trade_cost=DEFAULT_FUTURE_COST_PER_TRADE,
             ),
         }
 

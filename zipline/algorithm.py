@@ -28,6 +28,7 @@ import pandas as pd
 from contextlib2 import ExitStack
 from pandas.tseries.tools import normalize_date
 import numpy as np
+from types import NoneType
 
 from itertools import chain, repeat
 from numbers import Integral
@@ -67,7 +68,10 @@ from zipline.errors import (
 )
 from zipline.finance.trading import TradingEnvironment
 from zipline.finance.blotter import Blotter
-from zipline.finance.commission import CommissionModel
+from zipline.finance.commission import (
+    EquityCommissionModel,
+    FutureCommissionModel,
+)
 from zipline.finance.controls import (
     LongOnly,
     MaxOrderCount,
@@ -84,7 +88,7 @@ from zipline.finance.execution import (
 )
 from zipline.finance.performance import PerformanceTracker
 from zipline.finance.asset_restrictions import Restrictions
-from zipline.finance.slippage import SlippageModel
+from zipline.finance.slippage import EquitySlippageModel, FutureSlippageModel
 from zipline.finance.cancel_policy import NeverCancel, CancelPolicy
 from zipline.finance.asset_restrictions import (
     NoRestrictions,
@@ -1641,34 +1645,55 @@ class TradingAlgorithm(object):
         return dt
 
     @api_method
-    def set_slippage(self, slippage):
-        """Set the slippage model for the simulation.
+    @expect_types(
+        equities=EquitySlippageModel, futures=(FutureSlippageModel, NoneType),
+    )
+    def set_slippage(self, equities, futures=None):
+        """Set the slippage models for the simulation.
 
         Parameters
         ----------
-        slippage : SlippageModel
-            The slippage model to use.
+        equities : EquitySlippageModel
+            The slippage model to use for trading equities.
+        futures : FutureSlippageModel
+            The slippage model to use for trading futures.
 
         See Also
         --------
         :class:`zipline.finance.slippage.SlippageModel`
         """
-        if not isinstance(slippage, SlippageModel):
-            raise UnsupportedSlippageModel()
         if self.initialized:
             raise SetSlippagePostInit()
-        # TODO: Create separate API methods for setting Equity and Future
-        # slippage models.
-        self.blotter.slippage_models[Equity] = slippage
+
+        if not isinstance(equities, EquitySlippageModel):
+            raise UnsupportedSlippageModel(
+                asset_type='equities',
+                slippage_type=EquitySlippageModel.__name__,
+            )
+        self.blotter.slippage_models[Equity] = equities
+
+        if futures is not None:
+            if not isinstance(futures, FutureSlippageModel):
+                raise UnsupportedSlippageModel(
+                    asset_type='futures',
+                    slippage_type=FutureSlippageModel.__name__,
+                )
+            self.blotter.slippage_models[Future] = futures
 
     @api_method
-    def set_commission(self, commission):
-        """Sets the commission model for the simulation.
+    @expect_types(
+        equities=EquityCommissionModel,
+        futures=(FutureCommissionModel, NoneType),
+    )
+    def set_commission(self, equities, futures=None):
+        """Sets the commission models for the simulation.
 
         Parameters
         ----------
-        commission : CommissionModel
-            The commission model to use.
+        equities : EquityCommissionModel
+            The commission model to use for trading equities.
+        futures : FutureCommissionModel
+            The commission model to use for trading futures.
 
         See Also
         --------
@@ -1676,15 +1701,23 @@ class TradingAlgorithm(object):
         :class:`zipline.finance.commission.PerTrade`
         :class:`zipline.finance.commission.PerDollar`
         """
-        if not isinstance(commission, CommissionModel):
-            raise UnsupportedCommissionModel()
-
         if self.initialized:
             raise SetCommissionPostInit()
 
-        # TODO: Create separate API methods for setting Equity and Future
-        # commission models.
-        self.blotter.commission_models[Equity] = commission
+        if not isinstance(equities, EquityCommissionModel):
+            raise UnsupportedCommissionModel(
+                asset_type='equities',
+                commission_type=EquityCommissionModel.__name__,
+            )
+        self.blotter.commission_models[Equity] = equities
+
+        if futures is not None:
+            if not isinstance(futures, FutureCommissionModel):
+                raise UnsupportedCommissionModel(
+                    asset_type='futures',
+                    commission_type=FutureCommissionModel.__name__,
+                )
+            self.blotter.commission_models[Equity] = futures
 
     @api_method
     def set_cancel_policy(self, cancel_policy):
