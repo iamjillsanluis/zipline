@@ -18,82 +18,83 @@ from abc import abstractmethod
 from six import with_metaclass
 
 DEFAULT_PER_SHARE_COST = 0.0075       # 0.75 cents per share
+DEFAULT_PER_CONTRACT_COST = 0.85      # 0.75 cents per future contract
 DEFAULT_PER_DOLLAR_COST = 0.0015      # 0.15 cents per dollar
 DEFAULT_MINIMUM_COST_PER_TRADE = 1.0  # $1 per trade
-DEFAULT_FUTURE_COST_PER_TRADE = 2.35  # $2.35 per trade
-DEFAULT_FUTURE_COST_BY_SYMBOL = {     # Default costs by root symbol
-    'AD': 2.35,  # AUD
-    'AI': 2.35,  # Bloomberg Commodity Index
-    'BD': 2.35,  # Big Dow
-    'BO': 2.35,  # Soybean Oil
-    'BP': 2.35,  # GBP
-    'CD': 2.35,  # CAD
-    'CL': 2.35,  # Crude Oil
-    'CM': 2.35,  # Corn e-mini
-    'CN': 2.35,  # Corn
-    'DJ': 2.35,  # Dow Jones
-    'EC': 2.35,  # Euro FX
-    'ED': 2.35,  # Eurodollar
-    'EE': 2.35,  # Euro FX e-mini
-    'EI': 2.35,  # MSCI Emerging Markets mini
-    'EL': 2.35,  # Eurodollar NYSE LIFFE
-    'ER': 2.35,  # Russell2000 e-mini
-    'ES': 2.35,  # SP500 e-mini
-    'ET': 2.35,  # Ethanol
-    'EU': 2.35,  # Eurodollar e-micro
-    'FC': 2.35,  # Feeder Cattle
-    'FF': 2.35,  # 3-Day Federal Funds
-    'FI': 2.35,  # Deliverable Interest Rate Swap 5y
-    'FS': 2.35,  # Interest Rate Swap 5y
-    'FV': 2.35,  # US 5y
-    'GC': 2.35,  # Gold
-    'HG': 2.35,  # Copper
-    'HO': 2.35,  # Heating Oil
-    'HU': 2.35,  # Unleaded Gasoline
-    'JE': 2.35,  # JPY e-mini
-    'JY': 2.35,  # JPY
-    'LB': 2.35,  # Lumber
-    'LC': 2.35,  # Live Cattle
-    'LH': 2.35,  # Lean Hogs
-    'MB': 2.35,  # Municipal Bonds
-    'MD': 2.35,  # SP400 Midcap
-    'ME': 2.35,  # MXN
-    'MG': 2.35,  # MSCI EAFE mini
-    'MI': 2.35,  # SP400 Midcap e-mini
-    'MS': 2.35,  # Soybean e-mini
-    'MW': 2.35,  # Wheat e-mini
-    'ND': 2.35,  # Nasdaq100
-    'NG': 2.35,  # Natural Gas
-    'NK': 2.35,  # Nikkei225
-    'NQ': 2.35,  # Nasdaq100 e-mini
-    'NZ': 2.35,  # NZD
-    'OA': 2.35,  # Oats
-    'PA': 2.35,  # Palladium
-    'PB': 2.35,  # Pork Bellies
-    'PL': 2.35,  # Platinum
-    'QG': 2.35,  # Natural Gas e-mini
-    'QM': 2.35,  # Crude Oil e-mini
-    'RM': 2.35,  # Russell1000 e-mini
-    'RR': 2.35,  # Rough Rice
-    'SB': 2.35,  # Sugar
-    'SF': 2.35,  # CHF
-    'SM': 2.35,  # Soybean Meal
-    'SP': 2.35,  # SP500
-    'SV': 2.35,  # Silver
-    'SY': 2.35,  # Soybean
-    'TB': 2.35,  # Treasury Bills
-    'TN': 2.35,  # Deliverable Interest Rate Swap 10y
-    'TS': 2.35,  # Interest Rate Swap 10y
-    'TU': 2.35,  # US 2y
-    'TY': 2.35,  # US 10y
-    'UB': 2.35,  # Ultra Tbond
-    'US': 2.35,  # US 30y
-    'VX': 2.35,  # VIX
-    'WC': 2.35,  # Wheat
-    'XB': 2.35,  # RBOB Gasoline
-    'XG': 2.35,  # Gold e-mini
-    'YM': 2.35,  # Dow Jones e-mini
-    'YS': 2.35,  # Silver e-mini
+DEFAULT_FUTURE_EXCHANGE_FEE = 1.50    # $1.50 per trade
+FUTURE_EXCHANGE_FEES_BY_SYMBOL = {    # Default fees by root symbol
+    'AD': 1.60,  # AUD
+    'AI': 0.96,  # Bloomberg Commodity Index
+    'BD': 1.50,  # Big Dow
+    'BO': 1.95,  # Soybean Oil
+    'BP': 1.60,  # GBP
+    'CD': 1.60,  # CAD
+    'CL': 1.50,  # Crude Oil
+    'CM': 1.03,  # Corn e-mini
+    'CN': 1.95,  # Corn
+    'DJ': 1.50,  # Dow Jones
+    'EC': 1.60,  # Euro FX
+    'ED': 1.25,  # Eurodollar
+    'EE': 1.50,  # Euro FX e-mini
+    'EI': 1.50,  # MSCI Emerging Markets mini
+    'EL': 1.50,  # Eurodollar NYSE LIFFE
+    'ER': 0.65,  # Russell2000 e-mini
+    'ES': 1.18,  # SP500 e-mini
+    'ET': 1.50,  # Ethanol
+    'EU': 1.50,  # Eurodollar e-micro
+    'FC': 2.03,  # Feeder Cattle
+    'FF': 0.96,  # 3-Day Federal Funds
+    'FI': 0.56,  # Deliverable Interest Rate Swap 5y
+    'FS': 1.50,  # Interest Rate Swap 5y
+    'FV': 0.65,  # US 5y
+    'GC': 1.50,  # Gold
+    'HG': 1.50,  # Copper
+    'HO': 1.50,  # Heating Oil
+    'HU': 1.50,  # Unleaded Gasoline
+    'JE': 0.16,  # JPY e-mini
+    'JY': 1.60,  # JPY
+    'LB': 2.03,  # Lumber
+    'LC': 2.03,  # Live Cattle
+    'LH': 2.03,  # Lean Hogs
+    'MB': 1.50,  # Municipal Bonds
+    'MD': 1.50,  # SP400 Midcap
+    'ME': 1.60,  # MXN
+    'MG': 1.50,  # MSCI EAFE mini
+    'MI': 1.18,  # SP400 Midcap e-mini
+    'MS': 1.03,  # Soybean e-mini
+    'MW': 1.03,  # Wheat e-mini
+    'ND': 1.50,  # Nasdaq100
+    'NG': 1.50,  # Natural Gas
+    'NK': 2.15,  # Nikkei225
+    'NQ': 1.18,  # Nasdaq100 e-mini
+    'NZ': 1.60,  # NZD
+    'OA': 1.95,  # Oats
+    'PA': 1.50,  # Palladium
+    'PB': 1.50,  # Pork Bellies
+    'PL': 1.50,  # Platinum
+    'QG': 0.50,  # Natural Gas e-mini
+    'QM': 1.20,  # Crude Oil e-mini
+    'RM': 1.50,  # Russell1000 e-mini
+    'RR': 1.95,  # Rough Rice
+    'SB': 2.10,  # Sugar
+    'SF': 1.60,  # CHF
+    'SM': 1.95,  # Soybean Meal
+    'SP': 2.40,  # SP500
+    'SV': 1.50,  # Silver
+    'SY': 1.95,  # Soybean
+    'TB': 1.50,  # Treasury Bills
+    'TN': 0.56,  # Deliverable Interest Rate Swap 10y
+    'TS': 1.50,  # Interest Rate Swap 10y
+    'TU': 1.50,  # US 2y
+    'TY': 0.75,  # US 10y
+    'UB': 0.85,  # Ultra Tbond
+    'US': 0.80,  # US 30y
+    'VX': 1.50,  # VIX
+    'WC': 1.95,  # Wheat
+    'XB': 1.50,  # RBOB Gasoline
+    'XG': 0.75,  # Gold e-mini
+    'YM': 1.50,  # Dow Jones e-mini
+    'YS': 0.75,  # Silver e-mini
 }
 
 
@@ -221,19 +222,23 @@ class PerContract(PerUnit, FutureCommissionModel):
 
     Parameters
     ----------
-    cost : float or dict
+    cost_per_contract : float or dict
         The amount of commissions paid per contract traded. If given a float,
         the commission for all futures contracts is the same. If given a
         dictionary, it must map root symbols to the commission cost for
         contracts of that symbol.
+    exchange_fee : float
+        A flat-rate fee charged by the exchange per trade. This value is
+        constant no matter how many contracts are being traded.
     min_trade_cost : float
         The minimum amount of commissions paid per trade.
     """
 
-    def __init__(self, cost, min_trade_cost):
-        if isinstance(cost, int):
-            cost = float(cost)
-        self.cost_per_contract = cost
+    def __init__(self, cost_per_contract, exchange_fee, min_trade_cost):
+        if isinstance(cost_per_contract, int):
+            cost_per_contract = float(cost_per_contract)
+        self.cost_per_contract = cost_per_contract
+        self.exchange_fee = float(exchange_fee)
         self.min_trade_cost = min_trade_cost
 
     def calculate(self, order, transaction):
@@ -244,13 +249,14 @@ class PerContract(PerUnit, FutureCommissionModel):
             # not provide a commission cost for a certain contract, fall back
             # on the default.
             root_symbol = order.asset.root_symbol
-            backup_cost = DEFAULT_FUTURE_COST_BY_SYMBOL.get(
-                root_symbol, DEFAULT_FUTURE_COST_PER_TRADE,
+            backup_cost = FUTURE_EXCHANGE_FEES_BY_SYMBOL.get(
+                root_symbol, DEFAULT_PER_CONTRACT_COST,
             )
             cost_per_contract = self.cost_per_contract.get(
                 root_symbol, backup_cost,
             )
-        return self._calculate(order, transaction, cost_per_contract)
+        total_cost = cost_per_contract + self.exchange_fee
+        return self._calculate(order, transaction, total_cost)
 
 
 class PerTradeBase(object):
