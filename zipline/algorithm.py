@@ -68,6 +68,7 @@ from zipline.errors import (
 from zipline.finance.trading import TradingEnvironment
 from zipline.finance.blotter import Blotter
 from zipline.finance.commission import (
+    CommissionModel,
     EquityCommissionModel,
     FutureCommissionModel,
 )
@@ -1648,7 +1649,7 @@ class TradingAlgorithm(object):
         return dt
 
     @api_method
-    def set_slippage(self, equities, futures=None):
+    def set_slippage(self, equities=None, futures=None):
         """Set the slippage models for the simulation.
 
         Parameters
@@ -1665,15 +1666,16 @@ class TradingAlgorithm(object):
         if self.initialized:
             raise SetSlippagePostInit()
 
-        # Continue to allow Equity models to subclass SlippageModel because
-        # forcing this to be an instance of EquitySlippageModel would break
-        # existing custom implementations.
-        if not isinstance(equities, SlippageModel):
-            raise UnsupportedSlippageModel(
-                asset_type='equities',
-                slippage_type=EquitySlippageModel.__name__,
-            )
-        self.blotter.slippage_models[Equity] = equities
+        if equities is not None:
+            # Continue to allow Equity models to subclass SlippageModel because
+            # forcing this to be an instance of EquitySlippageModel would break
+            # existing custom implementations.
+            if not isinstance(equities, SlippageModel):
+                raise UnsupportedSlippageModel(
+                    asset_type='equities',
+                    slippage_type=EquitySlippageModel.__name__,
+                )
+            self.blotter.slippage_models[Equity] = equities
 
         if futures is not None:
             if not isinstance(futures, FutureSlippageModel):
@@ -1684,7 +1686,7 @@ class TradingAlgorithm(object):
             self.blotter.slippage_models[Future] = futures
 
     @api_method
-    def set_commission(self, equities, futures=None):
+    def set_commission(self, equities=None, futures=None):
         """Sets the commission models for the simulation.
 
         Parameters
@@ -1703,15 +1705,16 @@ class TradingAlgorithm(object):
         if self.initialized:
             raise SetCommissionPostInit()
 
-        # Continue to allow Equity models to subclass CommissionModel because
-        # forcing this to be an instance of EquityCommissionModel would break
-        # existing custom implementations.
-        if not isinstance(equities, CommissionModel):
-            raise UnsupportedCommissionModel(
-                asset_type='equities',
-                commission_type=EquityCommissionModel.__name__,
-            )
-        self.blotter.commission_models[Equity] = equities
+        if equities is not None:
+            # Continue to allow Equity models to subclass CommissionModel
+            # because forcing this to be an instance of EquityCommissionModel
+            # would break existing custom implementations.
+            if not isinstance(equities, CommissionModel):
+                raise UnsupportedCommissionModel(
+                    asset_type='equities',
+                    commission_type=EquityCommissionModel.__name__,
+                )
+            self.blotter.commission_models[Equity] = equities
 
         if futures is not None:
             if not isinstance(futures, FutureCommissionModel):
