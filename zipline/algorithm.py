@@ -28,7 +28,6 @@ import pandas as pd
 from contextlib2 import ExitStack
 from pandas.tseries.tools import normalize_date
 import numpy as np
-from types import NoneType
 
 from itertools import chain, repeat
 from numbers import Integral
@@ -88,7 +87,11 @@ from zipline.finance.execution import (
 )
 from zipline.finance.performance import PerformanceTracker
 from zipline.finance.asset_restrictions import Restrictions
-from zipline.finance.slippage import EquitySlippageModel, FutureSlippageModel
+from zipline.finance.slippage import (
+    EquitySlippageModel,
+    FutureSlippageModel,
+    SlippageModel,
+)
 from zipline.finance.cancel_policy import NeverCancel, CancelPolicy
 from zipline.finance.asset_restrictions import (
     NoRestrictions,
@@ -1645,9 +1648,6 @@ class TradingAlgorithm(object):
         return dt
 
     @api_method
-    @expect_types(
-        equities=EquitySlippageModel, futures=(FutureSlippageModel, NoneType),
-    )
     def set_slippage(self, equities, futures=None):
         """Set the slippage models for the simulation.
 
@@ -1665,7 +1665,7 @@ class TradingAlgorithm(object):
         if self.initialized:
             raise SetSlippagePostInit()
 
-        if not isinstance(equities, EquitySlippageModel):
+        if not isinstance(equities, SlippageModel):
             raise UnsupportedSlippageModel(
                 asset_type='equities',
                 slippage_type=EquitySlippageModel.__name__,
@@ -1681,10 +1681,6 @@ class TradingAlgorithm(object):
             self.blotter.slippage_models[Future] = futures
 
     @api_method
-    @expect_types(
-        equities=EquityCommissionModel,
-        futures=(FutureCommissionModel, NoneType),
-    )
     def set_commission(self, equities, futures=None):
         """Sets the commission models for the simulation.
 
