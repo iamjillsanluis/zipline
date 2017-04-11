@@ -1665,6 +1665,9 @@ class TradingAlgorithm(object):
         if self.initialized:
             raise SetSlippagePostInit()
 
+        # Continue to allow Equity models to subclass SlippageModel because
+        # forcing this to be an instance of EquitySlippageModel would break
+        # existing custom implementations.
         if not isinstance(equities, SlippageModel):
             raise UnsupportedSlippageModel(
                 asset_type='equities',
@@ -1700,7 +1703,10 @@ class TradingAlgorithm(object):
         if self.initialized:
             raise SetCommissionPostInit()
 
-        if not isinstance(equities, EquityCommissionModel):
+        # Continue to allow Equity models to subclass CommissionModel because
+        # forcing this to be an instance of EquityCommissionModel would break
+        # existing custom implementations.
+        if not isinstance(equities, CommissionModel):
             raise UnsupportedCommissionModel(
                 asset_type='equities',
                 commission_type=EquityCommissionModel.__name__,
