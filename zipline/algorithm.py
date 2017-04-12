@@ -1649,15 +1649,15 @@ class TradingAlgorithm(object):
         return dt
 
     @api_method
-    def set_slippage(self, equities=None, futures=None):
+    def set_slippage(self, us_equities=None, us_futures=None):
         """Set the slippage models for the simulation.
 
         Parameters
         ----------
-        equities : EquitySlippageModel
-            The slippage model to use for trading equities.
-        futures : FutureSlippageModel
-            The slippage model to use for trading futures.
+        us_equities : EquitySlippageModel
+            The slippage model to use for trading US equities.
+        us_futures : FutureSlippageModel
+            The slippage model to use for trading US futures.
 
         See Also
         --------
@@ -1666,35 +1666,35 @@ class TradingAlgorithm(object):
         if self.initialized:
             raise SetSlippagePostInit()
 
-        if equities is not None:
+        if us_equities is not None:
             # Continue to allow Equity models to subclass SlippageModel because
             # forcing this to be an instance of EquitySlippageModel would break
             # existing custom implementations.
-            if not isinstance(equities, SlippageModel):
+            if not isinstance(us_equities, SlippageModel):
                 raise UnsupportedSlippageModel(
                     asset_type='equities',
                     slippage_type=EquitySlippageModel.__name__,
                 )
-            self.blotter.slippage_models[Equity] = equities
+            self.blotter.slippage_models[Equity] = us_equities
 
-        if futures is not None:
-            if not isinstance(futures, FutureSlippageModel):
+        if us_futures is not None:
+            if not isinstance(us_futures, FutureSlippageModel):
                 raise UnsupportedSlippageModel(
                     asset_type='futures',
                     slippage_type=FutureSlippageModel.__name__,
                 )
-            self.blotter.slippage_models[Future] = futures
+            self.blotter.slippage_models[Future] = us_futures
 
     @api_method
-    def set_commission(self, equities=None, futures=None):
+    def set_commission(self, us_equities=None, us_futures=None):
         """Sets the commission models for the simulation.
 
         Parameters
         ----------
-        equities : EquityCommissionModel
-            The commission model to use for trading equities.
-        futures : FutureCommissionModel
-            The commission model to use for trading futures.
+        us_equities : EquityCommissionModel
+            The commission model to use for trading US equities.
+        us_futures : FutureCommissionModel
+            The commission model to use for trading US futures.
 
         See Also
         --------
@@ -1705,24 +1705,24 @@ class TradingAlgorithm(object):
         if self.initialized:
             raise SetCommissionPostInit()
 
-        if equities is not None:
+        if us_equities is not None:
             # Continue to allow Equity models to subclass CommissionModel
             # because forcing this to be an instance of EquityCommissionModel
             # would break existing custom implementations.
-            if not isinstance(equities, CommissionModel):
+            if not isinstance(us_equities, CommissionModel):
                 raise UnsupportedCommissionModel(
                     asset_type='equities',
                     commission_type=EquityCommissionModel.__name__,
                 )
-            self.blotter.commission_models[Equity] = equities
+            self.blotter.commission_models[Equity] = us_equities
 
-        if futures is not None:
-            if not isinstance(futures, FutureCommissionModel):
+        if us_futures is not None:
+            if not isinstance(us_futures, FutureCommissionModel):
                 raise UnsupportedCommissionModel(
                     asset_type='futures',
                     commission_type=FutureCommissionModel.__name__,
                 )
-            self.blotter.commission_models[Equity] = futures
+            self.blotter.commission_models[Equity] = us_futures
 
     @api_method
     def set_cancel_policy(self, cancel_policy):
