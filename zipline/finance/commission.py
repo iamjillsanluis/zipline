@@ -148,17 +148,6 @@ class PerUnit(object):
     fixed cost per unit traded.
     """
 
-    def __init__(self, cost_per_unit, min_trade_cost):
-        self.cost_per_unit = cost_per_unit
-        self.min_trade_cost = min_trade_cost
-
-    def __repr__(self):
-        return "{class_name}(cost_per_unit={cost_per_unit}, " \
-               "min_trade_cost={min_trade_cost})" \
-            .format(class_name=self.__class__.__name__,
-                    cost_per_unit=self.cost_per_unit,
-                    min_trade_cost=self.min_trade_cost)
-
     def _calculate(self, order, transaction, cost_per_unit, exchange_fee):
         """
         If there is a minimum commission:
@@ -212,7 +201,18 @@ class PerShare(PerUnit, EquityCommissionModel):
                  cost=DEFAULT_PER_SHARE_COST,
                  min_trade_cost=DEFAULT_MINIMUM_COST_PER_TRADE):
         self.cost_per_share = float(cost)
-        super(PerShare, self).__init__(self.cost_per_share, min_trade_cost)
+        self.min_trade_cost = min_trade_cost
+
+    def __repr__(self):
+        return (
+            '{class_name}(cost_per_share={cost_per_share}, '
+            'min_trade_cost={min_trade_cost})'
+            .format(
+                class_name=self.__class__.__name__,
+                cost_per_share=self.cost_per_share,
+                min_trade_cost=self.min_trade_cost,
+            )
+        )
 
     def calculate(self, order, transaction):
         return self._calculate(
@@ -252,7 +252,29 @@ class PerContract(PerUnit, FutureCommissionModel):
             exchange_fee = float(exchange_fee)
         self.cost_per_contract = cost_per_contract
         self.exchange_fee = exchange_fee
-        super(PerContract, self).__init__(cost_per_contract, min_trade_cost)
+        self.min_trade_cost = min_trade_cost
+
+    def __repr__(self):
+        if isinstance(self.cost_per_contract, float):
+            cost_per_contract = self.cost_per_contract
+        else:
+            cost_per_contract = '[varies]'
+
+        if isinstance(self.exchange_fee, float):
+            exchange_fee = self.exchange_fee
+        else:
+            exchange_fee = '[varies]'
+
+        return (
+            '{class_name}(cost_per_contract={cost_per_contract}, '
+            'exchange_fee={exchange_fee}, min_trade_cost={min_trade_cost})'
+            .format(
+                class_name=self.__class__.__name__,
+                cost_per_contract=cost_per_contract,
+                exchange_fee=exchange_fee,
+                min_trade_cost=self.min_trade_cost,
+            )
+        )
 
     def calculate(self, order, transaction):
         if isinstance(self.cost_per_contract, float):
@@ -327,26 +349,25 @@ class PerFutureTrade(PerContract):
 
     Parameters
     ----------
-    cost : float or dict
-        The flat amount of commissions paid per future trade, regardless of the
-        number of contracts being traded. If given a float, the commission for
-        all futures contracts is the same. If given a dictionary, it must map
-        root symbols to the commission cost for trading contracts of that
-        symbol.
+    cost_per_trade : float or dict
+        The flat amount of commissions paid per trade, regardless of the number
+        of contracts being traded. If given a float, the commission for all
+        futures contracts is the same. If given a dictionary, it must map root
+        symbols to the commission cost for trading contracts of that symbol.
     """
 
-    def __init__(self, cost):
+    def __init__(self, cost_per_trade):
         super(PerFutureTrade, self).__init__(
-            cost_per_contract=0, exchange_fee=cost, min_trade_cost=0,
+            cost_per_contract=0, exchange_fee=cost_per_trade, min_trade_cost=0,
         )
 
     def __repr__(self):
-        if isinstance(self.cost, float):
-            cost = self.cost
+        if isinstance(self.cost_per_trade, float):
+            cost_per_trade = self.cost_per_trade
         else:
-            cost = '[varies]'
-        return '{class_name}(cost_per_trade={cost})'.format(
-            class_name=self.__class__.__name__, cost=cost,
+            cost_per_trade = '[varies]'
+        return '{class_name}(cost_per_trade={cost_per_trade})'.format(
+            class_name=self.__class__.__name__, cost_per_trade=cost_per_trade,
         )
 
 
