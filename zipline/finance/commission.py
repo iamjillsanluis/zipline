@@ -18,10 +18,9 @@ from abc import abstractmethod
 from six import with_metaclass
 
 DEFAULT_PER_SHARE_COST = 0.0075       # 0.75 cents per share
-DEFAULT_PER_CONTRACT_COST = 0.85      # 0.75 cents per future contract
+DEFAULT_PER_CONTRACT_COST = 0.85      # $0.85 per future contract
 DEFAULT_PER_DOLLAR_COST = 0.0015      # 0.15 cents per dollar
 DEFAULT_MINIMUM_COST_PER_TRADE = 1.0  # $1 per trade
-DEFAULT_FUTURE_EXCHANGE_FEE = 1.50    # $1.50 per trade
 FUTURE_EXCHANGE_FEES_BY_SYMBOL = {    # Default fees by root symbol
     'AD': 1.60,  # AUD
     'AI': 0.96,  # Bloomberg Commodity Index
@@ -149,6 +148,10 @@ class PerUnit(object):
     fixed cost per unit traded.
     """
 
+    def __init__(self, cost_per_unit, min_trade_cost):
+        self.cost_per_unit = cost_per_unit
+        self.min_trade_cost = min_trade_cost
+
     def __repr__(self):
         return "{class_name}(cost_per_unit={cost_per_unit}, " \
                "min_trade_cost={min_trade_cost})" \
@@ -156,7 +159,7 @@ class PerUnit(object):
                     cost_per_unit=self.cost_per_unit,
                     min_trade_cost=self.min_trade_cost)
 
-    def _calculate(self, order, transaction, cost_per_unit):
+    def _calculate(self, order, transaction, cost_per_unit, exchange_fee):
         """
         If there is a minimum commission:
             If the order hasn't had a commission paid yet, pay the minimum
@@ -169,21 +172,21 @@ class PerUnit(object):
             Pay commission based on number of units in the transaction.
         """
         additional_commission = abs(transaction.amount * cost_per_unit)
-
-        if self.min_trade_cost is None:
-            # no min trade cost, so just return the cost for this transaction
-            return additional_commission
+        min_trade_cost = self.min_trade_cost or 0
 
         if order.commission == 0:
-            # no commission paid yet, pay at least the minimum
-            return max(self.min_trade_cost, additional_commission)
+            # no commission paid yet, pay at least the minimum plus a one-time
+            # exchange fee.
+            return max(min_trade_cost, additional_commission + exchange_fee)
         else:
             # we've already paid some commission, so figure out how much we
             # would be paying if we only counted per unit.
             per_unit_total = \
-                (order.filled * cost_per_unit) + additional_commission
+                (order.filled * cost_per_unit) + \
+                additional_commission + \
+                exchange_fee
 
-            if per_unit_total < self.min_trade_cost:
+            if per_unit_total < min_trade_cost:
                 # if we haven't hit the minimum threshold yet, don't pay
                 # additional commission
                 return 0
@@ -209,10 +212,12 @@ class PerShare(PerUnit, EquityCommissionModel):
                  cost=DEFAULT_PER_SHARE_COST,
                  min_trade_cost=DEFAULT_MINIMUM_COST_PER_TRADE):
         self.cost_per_share = float(cost)
-        self.min_trade_cost = min_trade_cost
+        super(PerShare, self).__init__(self.cost_per_share, min_trade_cost)
 
     def calculate(self, order, transaction):
-        return self._calculate(order, transaction, self.cost_per_share)
+        return self._calculate(
+            order, transaction, self.cost_per_share, exchange_fee=0,
+        )
 
 
 class PerContract(PerUnit, FutureCommissionModel):
@@ -227,19 +232,27 @@ class PerContract(PerUnit, FutureCommissionModel):
         the commission for all futures contracts is the same. If given a
         dictionary, it must map root symbols to the commission cost for
         contracts of that symbol.
-    exchange_fee : float
-        A flat-rate fee charged by the exchange per trade. This value is
-        constant no matter how many contracts are being traded.
-    min_trade_cost : float
+    exchange_fee : float or dict
+        A flat-rate fee charged by the exchange per trade. This value is a
+        constant, one-time charge no matter how many contracts are being
+        traded. If given a float, the fee for all contracts is the same. If
+        given a dictionary, it must map root symbols to the fee for contracts
+        of that symbol.
+    min_trade_cost : float, optional
         The minimum amount of commissions paid per trade.
     """
 
-    def __init__(self, cost_per_contract, exchange_fee, min_trade_cost):
+    def __init__(self,
+                 cost_per_contract,
+                 exchange_fee,
+                 min_trade_cost=DEFAULT_MINIMUM_COST_PER_TRADE):
         if isinstance(cost_per_contract, int):
             cost_per_contract = float(cost_per_contract)
+        if isinstance(exchange_fee, int):
+            exchange_fee = float(exchange_fee)
         self.cost_per_contract = cost_per_contract
-        self.exchange_fee = float(exchange_fee)
-        self.min_trade_cost = min_trade_cost
+        self.exchange_fee = exchange_fee
+        super(PerContract, self).__init__(cost_per_contract, min_trade_cost)
 
     def calculate(self, order, transaction):
         if isinstance(self.cost_per_contract, float):
@@ -249,23 +262,37 @@ class PerContract(PerUnit, FutureCommissionModel):
             # not provide a commission cost for a certain contract, fall back
             # on the default.
             root_symbol = order.asset.root_symbol
-            backup_cost = FUTURE_EXCHANGE_FEES_BY_SYMBOL.get(
+            cost_per_contract = self.cost_per_contract.get(
                 root_symbol, DEFAULT_PER_CONTRACT_COST,
             )
-            cost_per_contract = self.cost_per_contract.get(
-                root_symbol, backup_cost,
+
+        if isinstance(self.exchange_fee, float):
+            exchange_fee = self.exchange_fee
+        else:
+            # Exchange fee is a dictionary. If the user's dictionary does not
+            # provide an exchange fee for a certain contract, fall back on the
+            # default.
+            root_symbol = order.asset.root_symbol
+            exchange_fee = self.exchange_fee.get(
+                root_symbol, FUTURE_EXCHANGE_FEES_BY_SYMBOL[root_symbol],
             )
-        total_cost = cost_per_contract + self.exchange_fee
-        return self._calculate(order, transaction, total_cost)
+
+        return self._calculate(
+            order, transaction, cost_per_contract, exchange_fee,
+        )
 
 
-class PerTradeBase(object):
+class PerEquityTrade(EquityCommissionModel):
     """
-    Mixin class for Equity and Future commission models calculated using a
-    fixed cost per trade.
+    Calculates a commission for a transaction based on a per trade cost.
+
+    Parameters
+    ----------
+    cost : float, optional
+        The flat amount of commissions paid per equity trade.
     """
 
-    def __init__(self, cost):
+    def __init__(self, cost=DEFAULT_MINIMUM_COST_PER_TRADE):
         """
         Cost parameter is the cost of a trade, regardless of share count.
         $5.00 per trade is fairly typical of discount brokers.
@@ -273,6 +300,11 @@ class PerTradeBase(object):
         # Cost needs to be floating point so that calculation using division
         # logic does not floor to an integer.
         self.cost = float(cost)
+
+    def __repr__(self):
+        return '{class_name}(cost_per_trade={cost})'.format(
+            class_name=self.__class__.__name__, cost=self.cost,
+        )
 
     def calculate(self, order, transaction):
         """
@@ -289,30 +321,33 @@ class PerTradeBase(object):
             return 0.0
 
 
-class PerEquityTrade(PerTradeBase, EquityCommissionModel):
+class PerFutureTrade(PerContract):
     """
     Calculates a commission for a transaction based on a per trade cost.
 
     Parameters
     ----------
-    cost : float, optional
-        The flat amount of commissions paid per equity trade.
+    cost : float or dict
+        The flat amount of commissions paid per future trade, regardless of the
+        number of contracts being traded. If given a float, the commission for
+        all futures contracts is the same. If given a dictionary, it must map
+        root symbols to the commission cost for trading contracts of that
+        symbol.
     """
 
-    def __init__(self, cost=DEFAULT_MINIMUM_COST_PER_TRADE):
-        super(PerEquityTrade, self).__init__(cost)
+    def __init__(self, cost):
+        super(PerFutureTrade, self).__init__(
+            cost_per_contract=0, exchange_fee=cost, min_trade_cost=0,
+        )
 
-
-class PerFutureTrade(PerTradeBase, FutureCommissionModel):
-    """
-    Calculates a commission for a transaction based on a per trade cost.
-
-    Parameters
-    ----------
-    cost : float, optional
-        The flat amount of commissions paid per future trade.
-    """
-    pass
+    def __repr__(self):
+        if isinstance(self.cost, float):
+            cost = self.cost
+        else:
+            cost = '[varies]'
+        return '{class_name}(cost_per_trade={cost})'.format(
+            class_name=self.__class__.__name__, cost=cost,
+        )
 
 
 class PerDollarBase(object):
@@ -321,7 +356,7 @@ class PerDollarBase(object):
     fixed cost per dollar traded.
     """
 
-    def __init__(self, cost=DEFAULT_PER_DOLLAR_COST):
+    def __init__(self, cost):
         """
         Cost parameter is the cost of a trade per-dollar. 0.0015
         on $1 million means $1,500 commission (=1M * 0.0015)

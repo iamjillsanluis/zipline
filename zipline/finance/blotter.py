@@ -25,8 +25,8 @@ from zipline.finance.slippage import (
     VolumeShareSlippage,
 )
 from zipline.finance.commission import (
-    DEFAULT_FUTURE_COST_BY_SYMBOL,
-    DEFAULT_FUTURE_COST_PER_TRADE,
+    DEFAULT_PER_CONTRACT_COST,
+    FUTURE_EXCHANGE_FEES_BY_SYMBOL,
     PerContract,
     PerShare,
 )
@@ -64,8 +64,8 @@ class Blotter(object):
         self.commission_models = {
             Equity: equity_commission or PerShare(),
             Future: future_commission or PerContract(
-                cost=DEFAULT_FUTURE_COST_BY_SYMBOL,
-                min_trade_cost=DEFAULT_FUTURE_COST_PER_TRADE,
+                cost_per_contract=DEFAULT_PER_CONTRACT_COST,
+                exchange_fee=FUTURE_EXCHANGE_FEES_BY_SYMBOL,
             ),
         }
 
