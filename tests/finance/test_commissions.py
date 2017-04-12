@@ -1,8 +1,16 @@
 from datetime import timedelta
 from textwrap import dedent
 
+from pandas import DataFrame
+
 from zipline import TradingAlgorithm
-from zipline.finance.commission import PerTrade, PerShare, PerDollar
+from zipline.finance.commission import (
+    PerContract,
+    PerDollar,
+    PerFutureTrade,
+    PerShare,
+    PerTrade,
+)
 from zipline.finance.order import Order
 from zipline.finance.transaction import Transaction
 from zipline.testing import ZiplineTestCase, trades_by_sid_to_dfs
@@ -17,8 +25,22 @@ from zipline.utils import factory
 class CommissionUnitTests(WithAssetFinder, ZiplineTestCase):
     ASSET_FINDER_EQUITY_SIDS = 1, 2
 
-    def generate_order_and_txns(self):
-        asset1 = self.asset_finder.retrieve_asset(1)
+    @classmethod
+    def make_futures_info(cls):
+        return DataFrame({
+            'sid': [1000, 1001],
+            'root_symbol': ['CL', 'FV'],
+            'symbol': ['CLF07', 'FVF07'],
+            'start_date': [cls.START_DATE, cls.START_DATE],
+            'end_date': [cls.END_DATE, cls.END_DATE],
+            'notice_date': [cls.END_DATE, cls.END_DATE],
+            'expiration_date': [cls.END_DATE, cls.END_DATE],
+            'multiplier': [500, 500],
+            'exchange': ['CME', 'CME'],
+        })
+
+    def generate_order_and_txns(self, sid):
+        asset1 = self.asset_finder.retrieve_asset(sid)
 
         # one order
         order = Order(dt=None, sid=asset1, amount=500)
@@ -35,65 +57,147 @@ class CommissionUnitTests(WithAssetFinder, ZiplineTestCase):
 
         return order, [txn1, txn2, txn3]
 
-    def test_per_trade(self):
-        model = PerTrade(cost=10)
+    def verify_per_trade_commissions(self, model, expected_commission, sid):
+        order, txns = self.generate_order_and_txns(sid)
 
-        order, txns = self.generate_order_and_txns()
+        self.assertEqual(expected_commission, model.calculate(order, txns[0]))
 
-        self.assertEqual(10, model.calculate(order, txns[0]))
-
-        order.commission = 10
+        order.commission = expected_commission
 
         self.assertEqual(0, model.calculate(order, txns[1]))
         self.assertEqual(0, model.calculate(order, txns[2]))
 
+    def test_per_trade(self):
+        # Test per trade model for equities.
+        model = PerTrade(cost=10)
+        self.verify_per_trade_commissions(model, expected_commission=10, sid=1)
+
+        # Test per trade model for futures.
+        model = PerFutureTrade(cost_per_trade=10)
+        self.verify_per_trade_commissions(
+            model, expected_commission=10, sid=1000,
+        )
+
+        # Test per trade model with custom costs per future symbol.
+        model = PerFutureTrade(cost_per_trade={'CL': 5, 'FV': 10})
+        self.verify_per_trade_commissions(
+            model, expected_commission=5, sid=1000,
+        )
+        self.verify_per_trade_commissions(
+            model, expected_commission=10, sid=1001,
+        )
+
     def test_per_share_no_minimum(self):
         model = PerShare(cost=0.0075, min_trade_cost=None)
 
-        order, txns = self.generate_order_and_txns()
+        order, txns = self.generate_order_and_txns(sid=1)
 
         # make sure each commission is pro-rated
         self.assertAlmostEqual(1.725, model.calculate(order, txns[0]))
         self.assertAlmostEqual(1.275, model.calculate(order, txns[1]))
         self.assertAlmostEqual(0.75, model.calculate(order, txns[2]))
 
-    def verify_per_share_commissions(self, model, commission_totals):
-        order, txns = self.generate_order_and_txns()
+    def verify_per_unit_commissions(self, model, commission_totals, sid):
+        order, txns = self.generate_order_and_txns(sid)
 
         for i, commission_total in enumerate(commission_totals):
             order.commission += model.calculate(order, txns[i])
             self.assertAlmostEqual(commission_total, order.commission)
             order.filled += txns[i].amount
 
+    def test_per_contract_no_minimum(self):
+        # Note that the exchange fee is a one-time cost that is only applied to
+        # the first fill of an order.
+        #
+        # The commission on the first fill is (230 * 0.01) + 0.3 = 2.6
+        # The commission on the second fill is 170 * 0.01 = 1.7
+        # The total after the second fill is 2.6 + 1.7 = 4.3
+        # The commission on the third fill is 100 * 0.01 = 1.0
+        # The total after the third fill is 5.3
+        model = PerContract(
+            cost_per_contract=0.01, exchange_fee=0.3, min_trade_cost=None,
+        )
+        self.verify_per_unit_commissions(model, [2.6, 4.3, 5.3], sid=1000)
+
+        # Test using custom costs and fees.
+        model = PerContract(
+            cost_per_contract={'CL': 0.01, 'FV': 0.0075},
+            exchange_fee={'CL': 0.3, 'FV': 0.5},
+            min_trade_cost=None,
+        )
+        self.verify_per_unit_commissions(model, [2.6, 4.3, 5.3], sid=1000)
+        self.verify_per_unit_commissions(model, [2.225, 3.5, 4.25], sid=1001)
+
     def test_per_share_with_minimum(self):
         # minimum is met by the first trade
-        self.verify_per_share_commissions(
+        self.verify_per_unit_commissions(
             PerShare(cost=0.0075, min_trade_cost=1),
-            [1.725, 3, 3.75]
+            commission_totals=[1.725, 3, 3.75],
+            sid=1,
         )
 
         # minimum is met by the second trade
-        self.verify_per_share_commissions(
+        self.verify_per_unit_commissions(
             PerShare(cost=0.0075, min_trade_cost=2.5),
-            [2.5, 3, 3.75]
+            commission_totals=[2.5, 3, 3.75],
+            sid=1,
         )
 
         # minimum is met by the third trade
-        self.verify_per_share_commissions(
+        self.verify_per_unit_commissions(
             PerShare(cost=0.0075, min_trade_cost=3.5),
-            [3.5, 3.5, 3.75]
+            commission_totals=[3.5, 3.5, 3.75],
+            sid=1,
         )
 
         # minimum is not met by any of the trades
-        self.verify_per_share_commissions(
+        self.verify_per_unit_commissions(
             PerShare(cost=0.0075, min_trade_cost=5.5),
-            [5.5, 5.5, 5.5]
+            commission_totals=[5.5, 5.5, 5.5],
+            sid=1,
+        )
+
+    def test_per_contract_with_minimum(self):
+        # Minimum is met by the first trade.
+        self.verify_per_unit_commissions(
+            PerContract(
+                cost_per_contract=.01, exchange_fee=0.3, min_trade_cost=1,
+            ),
+            commission_totals=[2.6, 4.3, 5.3],
+            sid=1000,
+        )
+
+        # Minimum is met by the second trade.
+        self.verify_per_unit_commissions(
+            PerContract(
+                cost_per_contract=.01, exchange_fee=0.3, min_trade_cost=3,
+            ),
+            commission_totals=[3.0, 4.3, 5.3],
+            sid=1000,
+        )
+
+        # Minimum is met by the third trade.
+        self.verify_per_unit_commissions(
+            PerContract(
+                cost_per_contract=.01, exchange_fee=0.3, min_trade_cost=5,
+            ),
+            commission_totals=[5.0, 5.0, 5.3],
+            sid=1000,
+        )
+
+        # Minimum is not met by any of the trades.
+        self.verify_per_unit_commissions(
+            PerContract(
+                cost_per_contract=.01, exchange_fee=0.3, min_trade_cost=7,
+            ),
+            commission_totals=[7.0, 7.0, 7.0],
+            sid=1000,
         )
 
     def test_per_dollar(self):
         model = PerDollar(cost=0.0015)
 
-        order, txns = self.generate_order_and_txns()
+        order, txns = self.generate_order_and_txns(sid=1)
 
         # make sure each commission is pro-rated
         self.assertAlmostEqual(34.5, model.calculate(order, txns[0]))
