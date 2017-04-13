@@ -1670,7 +1670,8 @@ class TradingAlgorithm(object):
             # Continue to allow Equity models to subclass SlippageModel because
             # forcing this to be an instance of EquitySlippageModel would break
             # existing custom implementations.
-            if not isinstance(us_equities, SlippageModel):
+            if isinstance(us_equities, FutureSlippageModel) or \
+                    not isinstance(us_equities, SlippageModel):
                 raise UnsupportedSlippageModel(
                     asset_type='equities',
                     slippage_type=EquitySlippageModel.__name__,
@@ -1709,7 +1710,8 @@ class TradingAlgorithm(object):
             # Continue to allow Equity models to subclass CommissionModel
             # because forcing this to be an instance of EquityCommissionModel
             # would break existing custom implementations.
-            if not isinstance(us_equities, CommissionModel):
+            if isinstance(us_equities, FutureCommissionModel) or \
+                    not isinstance(us_equities, CommissionModel):
                 raise UnsupportedCommissionModel(
                     asset_type='equities',
                     commission_type=EquityCommissionModel.__name__,
@@ -1722,7 +1724,7 @@ class TradingAlgorithm(object):
                     asset_type='futures',
                     commission_type=FutureCommissionModel.__name__,
                 )
-            self.blotter.commission_models[Equity] = us_futures
+            self.blotter.commission_models[Future] = us_futures
 
     @api_method
     def set_cancel_policy(self, cancel_policy):

@@ -4,6 +4,7 @@ from textwrap import dedent
 from pandas import DataFrame
 
 from zipline import TradingAlgorithm
+from zipline.errors import UnsupportedCommissionModel, UnsupportedSlippageModel
 from zipline.finance.commission import (
     PerContract,
     PerDollar,
@@ -220,18 +221,35 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
         def initialize(context):
             # for these tests, let us take out the entire bar with no price
             # impact
-            set_slippage(slippage.VolumeShareSlippage(1.0, 0))
+            set_slippage(
+                us_equities=slippage.VolumeShareSlippage(1.0, 0),
+                us_futures=slippage.VolumeContractSlippage(1.0, 0),
+            )
 
-            {0}
+            {commission}
             context.ordered = False
 
 
         def handle_data(context, data):
             if not context.ordered:
-                order(sid(133), {1})
+                order(sid({sid}), {amount})
                 context.ordered = True
         """,
     )
+
+    @classmethod
+    def make_futures_info(cls):
+        return DataFrame({
+            'sid': [1000, 1001],
+            'root_symbol': ['CL', 'FV'],
+            'symbol': ['CLF07', 'FVF07'],
+            'start_date': [cls.START_DATE, cls.START_DATE],
+            'end_date': [cls.END_DATE, cls.END_DATE],
+            'notice_date': [cls.END_DATE, cls.END_DATE],
+            'expiration_date': [cls.END_DATE, cls.END_DATE],
+            'multiplier': [500, 500],
+            'exchange': ['CME', 'CME'],
+        })
 
     @classmethod
     def make_equity_daily_bar_data(cls):
@@ -262,7 +280,11 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
 
     def test_per_trade(self):
         results = self.get_results(
-            self.code.format("set_commission(commission.PerTrade(1))", 300)
+            self.code.format(
+                commission="set_commission(commission.PerTrade(1))",
+                sid=133,
+                amount=300,
+            )
         )
 
         # should be 3 fills at 100 shares apiece
@@ -273,10 +295,30 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
 
         self.verify_capital_used(results, [-1001, -1000, -1000])
 
+    def test_futures_per_trade(self):
+        results = self.get_results(
+            self.code.format(
+                commission=(
+                    'set_commission(us_futures=commission.PerFutureTrade(1))'
+                ),
+                sid=1000,
+                amount=10,
+            )
+        )
+
+        # The capital used is only -1.0 (the commission cost) because no
+        # capital is actually spent to enter into a long position on a futures
+        # contract.
+        self.assertEqual(results.orders[1][0]['commission'], 1.0)
+        self.assertEqual(results.capital_used[1], -1.0)
+
     def test_per_share_no_minimum(self):
         results = self.get_results(
-            self.code.format("set_commission(commission.PerShare(0.05, None))",
-                             300)
+            self.code.format(
+                commission="set_commission(commission.PerShare(0.05, None))",
+                sid=133,
+                amount=300,
+            )
         )
 
         # should be 3 fills at 100 shares apiece
@@ -290,8 +332,11 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
     def test_per_share_with_minimum(self):
         # minimum hit by first trade
         results = self.get_results(
-            self.code.format("set_commission(commission.PerShare(0.05, 3))",
-                             300)
+            self.code.format(
+                commission="set_commission(commission.PerShare(0.05, 3))",
+                sid=133,
+                amount=300,
+            )
         )
 
         # commissions should be 5, 10, 15
@@ -302,8 +347,11 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
 
         # minimum hit by second trade
         results = self.get_results(
-            self.code.format("set_commission(commission.PerShare(0.05, 8))",
-                             300)
+            self.code.format(
+                commission="set_commission(commission.PerShare(0.05, 8))",
+                sid=133,
+                amount=300,
+            )
         )
 
         # commissions should be 8, 10, 15
@@ -315,8 +363,11 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
 
         # minimum hit by third trade
         results = self.get_results(
-            self.code.format("set_commission(commission.PerShare(0.05, 12))",
-                             300)
+            self.code.format(
+                commission="set_commission(commission.PerShare(0.05, 12))",
+                sid=133,
+                amount=300,
+            )
         )
 
         # commissions should be 12, 12, 15
@@ -328,8 +379,11 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
 
         # minimum never hit
         results = self.get_results(
-            self.code.format("set_commission(commission.PerShare(0.05, 18))",
-                             300)
+            self.code.format(
+                commission="set_commission(commission.PerShare(0.05, 18))",
+                sid=133,
+                amount=300,
+            )
         )
 
         # commissions should be 18, 18, 18
@@ -341,7 +395,11 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
 
     def test_per_dollar(self):
         results = self.get_results(
-            self.code.format("set_commission(commission.PerDollar(0.01))", 300)
+            self.code.format(
+                commission="set_commission(commission.PerDollar(0.01))",
+                sid=133,
+                amount=300,
+            )
         )
 
         # should be 3 fills at 100 shares apiece, each fill is worth $1k, so
@@ -352,6 +410,29 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
             self.assertEqual((i + 1) * 10, orders[0]["commission"])
 
         self.verify_capital_used(results, [-1010, -1010, -1010])
+
+    def test_incorrectly_set_futures_model(self):
+        with self.assertRaises(UnsupportedCommissionModel):
+            # Passing a futures commission model as the first argument, which
+            # is for setting equity models, should fail.
+            self.get_results(
+                self.code.format(
+                    commission='set_commission(commission.PerFutureTrade(1))',
+                    sid=1000,
+                    amount=10,
+                )
+            )
+
+        with self.assertRaises(UnsupportedSlippageModel):
+            # Passing a futures commission model as the first argument, which
+            # is for setting equity models, should fail.
+            self.get_results(
+                self.code.format(
+                    commission='set_slippage(slippage.FixedFutureSlippage(1))',
+                    sid=1000,
+                    amount=10,
+                )
+            )
 
     def verify_capital_used(self, results, values):
         self.assertEqual(values[0], results.capital_used[1])
