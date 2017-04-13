@@ -1,6 +1,7 @@
 from datetime import timedelta
 from textwrap import dedent
 
+from nose_parameterized import parameterized
 from pandas import DataFrame
 
 from zipline import TradingAlgorithm
@@ -392,6 +393,34 @@ class CommissionAlgorithmTests(WithDataPortal, WithSimParams, ZiplineTestCase):
         self.assertEqual(18, results.orders[3][0]["commission"])
 
         self.verify_capital_used(results, [-1018, -1000, -1000])
+
+    @parameterized.expand([
+        # The commission is (10 * 0.05) + 1.3 = 1.8, and the capital used is
+        # the same as the commission cost because no capital is actually spent
+        # to enter into a long position on a futures contract.
+        (None, 1.8),
+        # Minimum hit by first trade.
+        (1, 1.8),
+        # Minimum not hit by first trade, so use the minimum.
+        (3, 3.0),
+    ])
+    def test_per_contract(self, min_trade_cost, expected_commission):
+        results = self.get_results(
+            self.code.format(
+                commission=(
+                    'set_commission(us_futures=commission.PerContract('
+                    'cost_per_contract=0.05, exchange_fee=1.3, '
+                    'min_trade_cost={}))'.format(min_trade_cost)
+                ),
+                sid=1000,
+                amount=10,
+            ),
+        )
+
+        self.assertEqual(
+            results.orders[1][0]['commission'], expected_commission,
+        )
+        self.assertEqual(results.capital_used[1], -expected_commission)
 
     def test_per_dollar(self):
         results = self.get_results(
